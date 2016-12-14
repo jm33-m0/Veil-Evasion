@@ -1,0 +1,8 @@
+# Python
+*.pyc
+
+# OSX
+.DS_Store
+
+# Editor Swap Files
+*.swp

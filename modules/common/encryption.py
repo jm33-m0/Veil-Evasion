@@ -7,6 +7,8 @@ Contains any encryption-related methods that may be reused.
 import string
 import random
 import base64
+import urllib2
+import md5
 from Crypto.Cipher import DES
 from Crypto.Cipher import AES
 from Crypto.Cipher import ARC4
@@ -54,7 +56,7 @@ DecodeAES = lambda c, e: c.decrypt(base64.b64decode(e)).rstrip(Padding)
 
 def b64sub(s, key):
     """
-    "Encryption" method that base64 encodes a given string, 
+    "Encryption" method that base64 encodes a given string,
     then does a randomized alphabetic letter substitution.
     """
     enc_tbl = string.maketrans(string.ascii_letters, key)
@@ -77,6 +79,26 @@ def encryptAES(s):
 
     # return a tuple of (encodedText, randomKey)
     return (encrypted, key)
+
+def encryptAES_http_request(s, http_key):
+    """
+    Generates a AES 16 Byte key from a http request of html page, builds an AES cipher,
+    encrypts passed 's' and returns (encrypted, http_key)
+    """
+    # Generate a HTTP GET REQUEST
+    m = md5.new()
+    m.update(http_key)
+    http_key = m.hexdigest()
+    http_key = str(http_key)
+
+    # Create Cipher Object with Generated Secret Key
+    cipher = AES.new(http_key)
+
+    # actually encrypt the text
+    encrypted = EncodeAES(cipher, s)
+
+    # return a tuple of (encodedText, randomKey)
+    return (encrypted, http_key)
 
 def constrainedAES(s):
     """
@@ -101,8 +123,8 @@ def constrainedAES(s):
 
 def knownPlaintext(known_key, random_plaintext):
     """
-    Uses key passed in to encrypt a random string which is 
-    used in a known plaintext attack to brute force its 
+    Uses key passed in to encrypt a random string which is
+    used in a known plaintext attack to brute force its
     own key
     """
     # Create our cipher object with our known key
@@ -113,6 +135,7 @@ def knownPlaintext(known_key, random_plaintext):
 
     # return our encrypted known plaintext
     return encrypted_string
+
 
 def encryptDES(s):
     """
@@ -127,7 +150,7 @@ def encryptDES(s):
     desmain = DES.new(key, DES.MODE_CFB, iv)
     encrypted = desmain.encrypt(s)
 
-    return (encrypted, (key,iv) )
+    return (encrypted, (key, iv))
 
 
 def encryptARC(s):
@@ -165,7 +188,7 @@ def pyherion(code):
 
     imports = list()
     codebase = list()
-    
+
     # strip out all imports from the code so pyinstaller can properly
     # launch the code by preimporting everything at compiletime
     for line in code.split("\n"):
@@ -174,14 +197,14 @@ def pyherion(code):
                 imports.append(line)
             else:
                 codebase.append(line)
-    
+
     # generate a random 256 AES key and build our AES cipher
     key = helpers.randomKey(32)
     cipherEnc = AES.new(key)
 
     # encrypt the input file (less the imports)
     encrypted = EncodeAES(cipherEnc, "\n".join(codebase))
-    
+
     # some random variable names
     b64var = helpers.randomString(5)
     aesvar = helpers.randomString(5)
@@ -192,7 +215,7 @@ def pyherion(code):
 
     # shuffle up our imports
     random.shuffle(imports)
-    
+
     # add in the AES imports and any imports found in the file
     crypted = ";".join(imports) + "\n"
 
@@ -205,9 +228,9 @@ def pyherion(code):
 def buildAryaLauncher(raw):
     """
     Takes a raw set of bytes and builds a launcher shell to b64decode/decrypt
-    a string rep of the bytes, and then use reflection to invoke 
+    a string rep of the bytes, and then use reflection to invoke
     the original .exe
-    
+
     """
 
     # the 'key' is a randomized alpha lookup table [a-zA-Z] used for substitution

